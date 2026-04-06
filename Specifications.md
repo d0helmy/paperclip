@@ -439,6 +439,13 @@ Each env entry in `adapter_config.env` is a typed secret:
 
 Secret values are never returned in API responses. They are resolved at invocation time.
 
+#### Well-known `env` keys for `opencode_local`
+
+| Key | Purpose |
+| --- | --- |
+| `OPENCODE_E2E_LLM_URL` | Override the LLM base URL that OpenCode uses. Set to `http://localhost:11435/v1` to route through the smart Ollama proxy. |
+| `PAPERCLIP_API_KEY` | Agent API key injected when JWT-based auth is not configured. |
+
 ### 5.3 Agent integration levels
 
 Paperclip supports progressive integration depth:
@@ -448,6 +455,41 @@ Paperclip supports progressive integration depth:
 | **Callable** | Be invocable | Minimum requirement. Paperclip starts the agent; nothing else required. |
 | **Status reporting** | Report exit status | Agent sets issue status to `done` or `blocked` before exiting. |
 | **Fully instrumented** | Full API integration | Agent checks out tasks, posts comments, reports costs, and uses `X-Paperclip-Run-Id` on all calls. |
+
+### 5.4 Local Ollama model support
+
+Local adapter types (`opencode_local`) can be used with small models served by [Ollama](https://ollama.com) instead of a cloud LLM provider.
+
+#### How it works
+
+1. Ollama serves models on `http://localhost:11434` (default port).
+2. `scripts/smart_ollama_proxy.py` listens on port **11435** and acts as a compatibility shim. It detects tool call output encoded as plain text — which small models such as `llama3.2:3b` commonly generate — and re-encodes it as proper SSE `tool_calls` events that OpenCode expects.
+3. The agent's `adapter_config.env` sets `OPENCODE_E2E_LLM_URL` to `http://localhost:11435/v1`, so OpenCode sends all completions requests through the proxy.
+
+#### Text tool-call formats normalised by the proxy
+
+| Format | Example trigger string |
+| --- | --- |
+| JSON object `{"name":…,"parameters":…}` | Model outputs bare JSON tool description  |
+| Go-struct `{function <nil> {toolName key:"val"}}` | Common in quantised Llama variants |
+| Functional `toolName(key="val")` | Simplified call syntax |
+
+All other requests (non-tool-call completions, `/api/chat`, `/v1/models`) are forwarded verbatim to `http://localhost:11434`.
+
+#### Starting the proxy
+
+```bash
+# Start (stays alive across heartbeat runs until machine reboot)
+python3 ~/paperclip/scripts/smart_ollama_proxy.py >> /tmp/proxy.log 2>&1 &
+
+# Check it is up
+curl -s http://localhost:11435/v1/models | python3 -m json.tool
+
+# Watch live log
+tail -f /tmp/proxy.log
+```
+
+The proxy does not auto-start on reboot. Add the command above to a login item or launchd plist if persistence across reboots is needed.
 
 ---
 

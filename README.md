@@ -239,6 +239,37 @@ The minimum contract to be a Paperclip agent: **be callable**. Richer integratio
 
 <br/>
 
+### Using local Ollama models with `opencode_local`
+
+The `opencode_local` adapter supports routing LLM calls to a local [Ollama](https://ollama.com) instance. Set the `OPENCODE_E2E_LLM_URL` env entry in the agent's `adapter_config` to point OpenCode at your local endpoint:
+
+```jsonc
+{
+  "adapter_type": "opencode_local",
+  "adapter_config": {
+    "model": "ollama/ceo-agent",
+    "env": {
+      "OPENCODE_E2E_LLM_URL": { "type": "plain", "value": "http://localhost:11435/v1" },
+      "PAPERCLIP_API_KEY":    { "type": "plain", "value": "<agent-api-key>" }
+    }
+  }
+}
+```
+
+**Smart proxy** — small Ollama models (e.g. `llama3.2:3b`) often emit tool calls as plain text rather than structured JSON. `scripts/smart_ollama_proxy.py` sits between OpenCode and Ollama on port 11435 and normalises three common text formats into proper SSE `tool_calls` chunks. Start it before running any `opencode_local` agent that uses Ollama:
+
+```bash
+# Start proxy (persists across heartbeat runs)
+python3 ~/paperclip/scripts/smart_ollama_proxy.py >> /tmp/proxy.log 2>&1 &
+
+# Verify it is running
+curl -s http://localhost:11435/v1/models | python3 -m json.tool
+```
+
+The proxy transparently forwards all other requests to the real Ollama API at `http://localhost:11434`.
+
+<br/>
+
 ## Plugin system
 
 ```bash
