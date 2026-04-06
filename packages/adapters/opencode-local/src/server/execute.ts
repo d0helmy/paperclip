@@ -185,8 +185,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   }
   const preparedRuntimeConfig = await prepareOpenCodeRuntimeConfig({ env, config });
   try {
+    const mergedRuntimeEnv = { ...process.env, ...preparedRuntimeConfig.env };
+    if (!hasExplicitApiKey && !authToken) {
+      delete mergedRuntimeEnv.PAPERCLIP_API_KEY;
+    }
     const runtimeEnv = Object.fromEntries(
-      Object.entries(ensurePathInEnv({ ...process.env, ...preparedRuntimeConfig.env })).filter(
+      Object.entries(ensurePathInEnv(mergedRuntimeEnv)).filter(
         (entry): entry is [string, string] => typeof entry[1] === "string",
       ),
     );
